@@ -75,16 +75,10 @@ export function parseSession(value: unknown): SessionFile {
   };
 }
 
-/** The saved tabs as a fresh tab state: only the tab that was shown loads, the rest sleep. */
-export function tabsFromSession(session: SessionFile, now: number): TabsState | null {
+/** The saved tabs as a fresh tab state. */
+export function tabsFromSession(session: SessionFile): TabsState | null {
   if (session.tabs.length === 0) return null;
-  const tabs = session.tabs.map((t, index) => ({
-    id: index + 1,
-    url: t.url,
-    title: t.title,
-    asleep: index !== session.activeIndex,
-    lastActiveAt: now,
-  }));
+  const tabs = session.tabs.map((t, index) => ({ id: index + 1, url: t.url, title: t.title }));
   return { tabs, activeId: session.activeIndex + 1, nextId: tabs.length + 1, closed: [] };
 }
 

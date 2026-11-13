@@ -1,6 +1,7 @@
 /**
- * The tabs of the window: which exist, which is shown, and which are "asleep" (unloaded to
- * save memory; they load again, with fresh data, when you open them).
+ * The tabs of the window. All tabs share ONE ClickUp page (see docs/decisions.md): a tab is
+ * a remembered place in ClickUp (address and title), and showing a tab moves the page there.
+ * So more tabs cost almost no memory.
  * Pure functions on plain data: the main process keeps the state and shows it. Unit tested.
  */
 
@@ -8,10 +9,6 @@ export interface Tab {
   id: number;
   url: string;
   title: string;
-  /** Unloaded: no page in memory. Opening the tab loads it again. */
-  asleep: boolean;
-  /** When the tab was last shown (ms since 1970). Used to decide which tabs go to sleep. */
-  lastActiveAt: number;
 }
 
 export interface ClosedTab {
@@ -29,16 +26,11 @@ export interface TabsState {
 
 /** How many closed tabs "reopen closed tab" remembers. */
 export const MAX_CLOSED = 20;
-/** A window never has more tabs than this (protects memory and the tab bar). */
+/** A window never has more tabs than this (keeps the tab bar usable). */
 export const MAX_TABS = 50;
 
-export function createTabs(url: string, now: number): TabsState {
-  return {
-    tabs: [{ id: 1, url, title: '', asleep: false, lastActiveAt: now }],
-    activeId: 1,
-    nextId: 2,
-    closed: [],
-  };
+export function createTabs(url: string): TabsState {
+  return { tabs: [{ id: 1, url, title: '' }], activeId: 1, nextId: 2, closed: [] };
 }
 
 export function activeTab(state: TabsState): Tab {
@@ -47,120 +39,74 @@ export function activeTab(state: TabsState): Tab {
   return tab;
 }
 
-/** Shows a tab. The previous tab is stamped, so its idle time starts now. */
-export function activateTab(state: TabsState, id: number, now: number): TabsState {
-  if (!state.tabs.some((t) => t.id === id)) return state;
-  return {
-    ...state,
-    activeId: id,
-    tabs: state.tabs.map((t) =>
-      t.id === id || t.id === state.activeId ? { ...t, asleep: false, lastActiveAt: now } : t,
-    ),
-  };
+export function activateTab(state: TabsState, id: number): TabsState {
+  if (id === state.activeId || !state.tabs.some((t) => t.id === id)) return state;
+  return { ...state, activeId: id };
 }
 
 export interface OpenOptions {
   title?: string;
-  /** Show the new tab straight away (default), or open it in the background. */
+  /** Show the new tab straight away (default), or only add it to the bar. */
   activate?: boolean;
-  now: number;
 }
 
 /** Opens a tab next to the current one (like a browser). At MAX_TABS, nothing happens. */
 export function openTab(
   state: TabsState,
   url: string,
-  { title = '', activate = true, now }: OpenOptions,
+  { title = '', activate = true }: OpenOptions = {},
 ): { state: TabsState; id: number | null } {
   if (state.tabs.length >= MAX_TABS) return { state, id: null };
   const id = state.nextId;
   const index = state.tabs.findIndex((t) => t.id === state.activeId) + 1;
-  // A background tab doesn't load until it is opened: no memory used for it yet.
-  const tab: Tab = { id, url, title, asleep: !activate, lastActiveAt: now };
-  const tabs = [...state.tabs.slice(0, index), tab, ...state.tabs.slice(index)];
+  const tabs = [...state.tabs.slice(0, index), { id, url, title }, ...state.tabs.slice(index)];
   const next = { ...state, tabs, nextId: id + 1 };
-  return { state: activate ? activateTab(next, id, now) : next, id };
+  return { state: activate ? activateTab(next, id) : next, id };
 }
 
 /**
  * Closes a tab and remembers it for "reopen closed tab". If it was shown, the tab to its right
  * (or else its left) is shown. Closing the last tab leaves one fresh tab at `homeUrl`.
  */
-export function closeTab(state: TabsState, id: number, homeUrl: string, now: number): TabsState {
+export function closeTab(state: TabsState, id: number, homeUrl: string): TabsState {
   const index = state.tabs.findIndex((t) => t.id === id);
   const tab = state.tabs[index];
   if (!tab) return state;
   const closed = [{ url: tab.url, title: tab.title }, ...state.closed].slice(0, MAX_CLOSED);
   const tabs = state.tabs.filter((t) => t.id !== id);
   if (tabs.length === 0) {
-    const fresh: Tab = {
-      id: state.nextId,
-      url: homeUrl,
-      title: '',
-      asleep: false,
-      lastActiveAt: now,
-    };
+    const fresh: Tab = { id: state.nextId, url: homeUrl, title: '' };
     return { tabs: [fresh], activeId: fresh.id, nextId: fresh.id + 1, closed };
   }
   const next: TabsState = { ...state, tabs, closed };
   if (state.activeId !== id) return next;
-  const neighbour = tabs[Math.min(index, tabs.length - 1)]!;
-  return activateTab({ ...next, activeId: neighbour.id }, neighbour.id, now);
+  return { ...next, activeId: tabs[Math.min(index, tabs.length - 1)]!.id };
 }
 
 /** Closes every tab except `id`. */
-export function closeOtherTabs(state: TabsState, id: number, homeUrl: string, now: number) {
+export function closeOtherTabs(state: TabsState, id: number, homeUrl: string): TabsState {
   return state.tabs
     .filter((t) => t.id !== id)
-    .reduce((s, t) => closeTab(s, t.id, homeUrl, now), activateTab(state, id, now));
+    .reduce((s, t) => closeTab(s, t.id, homeUrl), activateTab(state, id));
 }
 
 /** Reopens the most recently closed tab, next to the current one. */
-export function reopenClosedTab(state: TabsState, now: number): TabsState {
+export function reopenClosedTab(state: TabsState): TabsState {
   const [last, ...rest] = state.closed;
   if (!last) return state;
-  const opened = openTab({ ...state, closed: rest }, last.url, { title: last.title, now });
+  const opened = openTab({ ...state, closed: rest }, last.url, { title: last.title });
   return opened.id === null ? state : opened.state;
 }
 
-/** Records the address or title a tab's page reports. */
+/** Records the address or title the page reports for a tab. */
 export function updateTab(
   state: TabsState,
   id: number,
   patch: Partial<Pick<Tab, 'url' | 'title'>>,
 ): TabsState {
+  const tab = state.tabs.find((t) => t.id === id);
+  if (!tab || Object.entries(patch).every(([k, v]) => tab[k as keyof Tab] === v)) return state;
   return { ...state, tabs: state.tabs.map((t) => (t.id === id ? { ...t, ...patch } : t)) };
-}
-
-/** Unloads a tab. The shown tab never sleeps. */
-export function putToSleep(state: TabsState, ids: readonly number[]): TabsState {
-  if (!ids.some((id) => id !== state.activeId)) return state;
-  return {
-    ...state,
-    tabs: state.tabs.map((t) =>
-      ids.includes(t.id) && t.id !== state.activeId ? { ...t, asleep: true } : t,
-    ),
-  };
-}
-
-export interface SleepPolicy {
-  /** A tab that hasn't been shown for this long goes to sleep. */
-  idleMs: number;
-  /** At most this many tabs stay loaded (including the shown one); the longest-unused sleep first. */
-  maxAwake: number;
-}
-
-/** Background tabs are unloaded after 10 minutes, and at most 4 tabs stay loaded. */
-export const DEFAULT_SLEEP_POLICY: SleepPolicy = { idleMs: 10 * 60 * 1000, maxAwake: 4 };
-
-/** Which tabs should go to sleep now. */
-export function tabsToSleep(state: TabsState, now: number, policy: SleepPolicy): number[] {
-  const awake = state.tabs
-    .filter((t) => !t.asleep && t.id !== state.activeId)
-    .sort((a, b) => b.lastActiveAt - a.lastActiveAt);
-  return awake
-    .filter((t, index) => now - t.lastActiveAt >= policy.idleMs || index >= policy.maxAwake - 1)
-    .map((t) => t.id);
 }
 
 /** Moves a tab to another position (drag and drop). */
@@ -183,4 +129,24 @@ export function neighbourTabId(state: TabsState, offset: number): number {
 export function tabIdForNumber(state: TabsState, number: number): number | null {
   const tab = number === 9 ? state.tabs.at(-1) : state.tabs[number - 1];
   return tab?.id ?? null;
+}
+
+/**
+ * How the shared page gets to a tab's address:
+ * - `none`: it is already there.
+ * - `inPage`: ClickUp moves there itself, like with its Back button. Fast, no reload.
+ * - `load`: a full page load (the page is elsewhere: not loaded yet, another ClickUp site,
+ *   or a sign-in page).
+ */
+export function howToShow(currentUrl: string, targetUrl: string): 'none' | 'inPage' | 'load' {
+  if (currentUrl === targetUrl) return 'none';
+  try {
+    const current = new URL(currentUrl);
+    const target = new URL(targetUrl);
+    return current.origin === target.origin && current.hostname === 'app.clickup.com'
+      ? 'inPage'
+      : 'load';
+  } catch {
+    return 'load';
+  }
 }

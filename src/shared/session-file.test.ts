@@ -46,31 +46,28 @@ describe('parseSession', () => {
 });
 
 describe('tabsFromSession', () => {
-  it('restores the tabs with only the shown one loaded', () => {
-    const state = tabsFromSession(
-      {
-        ...EMPTY_SESSION,
-        tabs: [
-          { url: 'https://app.clickup.com/t/1', title: 'One' },
-          { url: 'https://app.clickup.com/t/2', title: 'Two' },
-        ],
-        activeIndex: 1,
-      },
-      100,
-    );
+  it('restores the tabs and which one was shown', () => {
+    const state = tabsFromSession({
+      ...EMPTY_SESSION,
+      tabs: [
+        { url: 'https://app.clickup.com/t/1', title: 'One' },
+        { url: 'https://app.clickup.com/t/2', title: 'Two' },
+      ],
+      activeIndex: 1,
+    });
     expect(state?.activeId).toBe(2);
-    expect(state?.tabs.map((t) => t.asleep)).toEqual([true, false]);
+    expect(state?.tabs.map((t) => t.title)).toEqual(['One', 'Two']);
     expect(state?.nextId).toBe(3);
   });
 
   it('returns null when nothing was saved', () => {
-    expect(tabsFromSession(EMPTY_SESSION, 0)).toBeNull();
+    expect(tabsFromSession(EMPTY_SESSION)).toBeNull();
   });
 
   it('round-trips through sessionTabs', () => {
-    let state = createTabs('https://app.clickup.com/t/1', 0);
-    state = openTab(state, 'https://app.clickup.com/t/2', { now: 0 }).state;
-    state = activateTab(state, 2, 1);
+    let state = createTabs('https://app.clickup.com/t/1');
+    state = openTab(state, 'https://app.clickup.com/t/2', { activate: false }).state;
+    state = activateTab(state, 2);
     const saved = parseSession({ ...EMPTY_SESSION, ...sessionTabs(state) });
     expect(saved.tabs.map((t) => t.url)).toEqual([
       'https://app.clickup.com/t/1',

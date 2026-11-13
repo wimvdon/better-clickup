@@ -27,7 +27,7 @@ export interface AppInfo {
 export interface TabView {
   id: number;
   title: string;
-  asleep: boolean;
+  /** The shared page is loading this tab (only ever the shown one). */
   loading: boolean;
 }
 
