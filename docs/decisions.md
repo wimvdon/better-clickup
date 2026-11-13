@@ -2,6 +2,13 @@
 
 Newest first. Add an entry for every notable choice: what was decided, why, and what was rejected.
 
+## 2026-11-13: Electron 45 and electron-vite 6
+
+- Updated together from Dependabot's pull requests (they conflicted with the Better ClickUp
+  change). Checked against the app: unit tests, end-to-end tests and the Windows build pass.
+- electron-vite 6 supports Vite 6 to 8. The project stays on Vite 7 for now; the Dependabot rule
+  that ignores Vite major updates can be lifted in a separate change.
+
 ## 2026-11-13: Better ClickUp
 
 ### What it is
