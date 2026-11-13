@@ -25,13 +25,13 @@
     "dist": "electron-vite build && electron-builder --config electron-builder.config.mjs --win --publish never"
   },
   "dependencies": {
-    "electron-updater": "^6.8.9"
+    "electron-updater": "^6.8.11"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@fluentui/react-components": "^9.74.9",
+    "@fluentui/react-components": "^9.75.1",
     "@fluentui/react-icons": "^2.0.345",
-    "@playwright/test": "^1.64.1",
+    "@playwright/test": "^1.65.0",
     "@types/node": "^24.19.2",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
@@ -42,14 +42,14 @@
     "eslint": "^10.12.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.7",
-    "globals": "^17.13.0",
+    "globals": "^17.14.0",
     "prettier": "^3.9.10",
-    "react": "^19.3.0",
-    "react-dom": "^19.3.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.71.2",
-    "vite": "^7.3.7",
-    "vitest": "^5.0.4"
+    "typescript-eslint": "^8.72.2",
+    "vite": "^7.3.8",
+    "vitest": "^5.1.0"
   },
   "allowScripts": {
     "esbuild": true,
