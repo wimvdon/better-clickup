@@ -1,0 +1,31 @@
+# Dependencies and build output
+node_modules/
+out/
+dist/
+
+# Test output
+coverage/
+playwright-report/
+test-results/
+
+# Signing material and secrets (NEVER commit)
+*.pfx
+*.p12
+*.cer
+*.pem
+*.key
+.env
+.env.*
+
+# Logs, OS and editor files
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# TypeScript incremental build info
+*.tsbuildinfo

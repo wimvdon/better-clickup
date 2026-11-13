@@ -1,0 +1,39 @@
+# Weekly dependency updates. Minor and patch updates are grouped into one pull request
+# per ecosystem to limit noise. Major updates get their own pull request (more likely to
+# need changes); CI checks every update, including starting and installing the app.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      npm-minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      # Held back until the tools that depend on them support the new major version
+      # (see docs/decisions.md). Remove a line once that support exists.
+      - dependency-name: vite # electron-vite 5 supports Vite up to 7
+        update-types: [version-update:semver-major]
+      - dependency-name: '@vitejs/plugin-react' # version 6 needs Vite 8
+        update-types: [version-update:semver-major]
+      - dependency-name: typescript # typescript-eslint supports TypeScript up to 6.0
+        update-types: [version-update:semver-major]
+      - dependency-name: '@types/node' # matches the Node.js major version in .nvmrc
+        update-types: [version-update:semver-major]
+    commit-message:
+      prefix: deps
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      actions-minor-and-patch:
+        update-types: [minor, patch]
+    commit-message:
+      prefix: ci

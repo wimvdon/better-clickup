@@ -1,0 +1,121 @@
+# Checks every change. Two jobs run side by side:
+#  - "Checks" (Linux, fast): lint, type check, unit tests, dependency audit.
+#  - "Windows build": end-to-end tests of the real app, builds the installer, installs and
+#    starts it, then attaches the installer to the run so it can be tested on a PC.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # A new push to the same pull request cancels the older, now outdated, run.
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  checks:
+    name: Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint and formatting
+        run: npm run lint
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Audit the dependencies that ship in the app
+        run: npm audit --omit=dev --audit-level=high
+
+  windows:
+    name: Windows build
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Full history and tags, for the git-describe version of dev builds.
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Cache Electron downloads
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
+          key: electron-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: electron-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: End-to-end tests (starts the real app)
+        run: npm run test:e2e
+
+      - name: Build the installer
+        run: npm run dist
+
+      - name: Find the installer
+        id: installer
+        shell: bash
+        run: |
+          set -euo pipefail
+          file="$(ls dist/*-setup.exe)"
+          echo "path=$file" >> "$GITHUB_OUTPUT"
+          echo "### Installer: \`$(basename "$file")\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "Download it from **Artifacts** at the bottom of this page. It installs as a separate *Dev* app next to your real one." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install, start and uninstall it
+        shell: pwsh
+        run: >-
+          ./scripts/smoke-test-installer.ps1
+          -Installer '${{ steps.installer.outputs.path }}'
+          -ProductName "$((Get-Content package.json | ConvertFrom-Json).productName) Dev"
+
+      - name: Upload the installer
+        uses: actions/upload-artifact@v7
+        with:
+          path: ${{ steps.installer.outputs.path }}
+          # A plain .exe (not a zip), so it can be run straight from the download.
+          archive: false
+          retention-days: 3
+          if-no-files-found: error
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-reports
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 3
+          if-no-files-found: ignore

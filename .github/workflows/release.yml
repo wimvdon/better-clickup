@@ -1,0 +1,218 @@
+# Builds the Windows installer and publishes it as a GitHub Release.
+#
+# How to start it:
+#   - Actions tab -> Release -> Run workflow -> choose "patch", "minor" or "major".
+#     The next version is computed from the latest vX.Y.Z tag, the tag is created and the
+#     release is published.
+#   - Choose "none" to only build a downloadable (Dev) installer: no tag, no release.
+#   - Or push a tag yourself: git tag v1.2.3 && git push origin v1.2.3
+#
+# It refuses to publish when: not on main, the tag/release already exists, the new version
+# is not higher than the previous one, or nothing changed since the previous release.
+name: Release
+
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Version bump (none = build a Dev installer only, no release)'
+        type: choice
+        options: [none, patch, minor, major]
+        default: none
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: Decide the version
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      publish: ${{ steps.plan.outputs.publish }}
+      tag: ${{ steps.plan.outputs.tag }}
+      version: ${{ steps.plan.outputs.version }}
+      previous: ${{ steps.plan.outputs.previous }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      - name: Check the release rules
+        id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+          BUMP: ${{ inputs.bump }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          fail() { echo "::error title=Release refused::$1"; exit 1; }
+          version_tool() { node scripts/version.mjs "$@"; }
+          # The checkout above (fetch-depth: 0) already has origin/main and every tag. It keeps no
+          # credentials, so no further git commands may talk to GitHub (a private repository would
+          # fail with "could not read Username"); use the gh API instead.
+          # Highest vX.Y.Z tag (by version, not date), optionally excluding one tag.
+          latest_tag() {
+            git tag --list 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | grep -vxF "${1:-}" | head -n 1 || true
+          }
+
+          if [ "$EVENT" = "push" ]; then
+            tag="$GITHUB_REF_NAME"
+            version="$(version_tool parse-tag "$tag")" || fail "Tag $tag must look like v1.2.3."
+            git merge-base --is-ancestor "$GITHUB_SHA" origin/main || fail "Tag $tag points to a commit that is not on main."
+            if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then fail "A release for $tag already exists."; fi
+            previous="$(latest_tag "$tag")"
+          elif [ "$BUMP" = "none" ]; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "Build only: a Dev installer, no tag and no release."
+            exit 0
+          else
+            [ "$GITHUB_REF" = "refs/heads/main" ] || fail "Releases can only be made from main (this run is on $GITHUB_REF_NAME)."
+            previous="$(latest_tag)"
+            version="$(version_tool next "$previous" "$BUMP")" || fail "Could not compute the next version."
+            tag="v$version"
+            if git rev-parse --quiet --verify "refs/tags/$tag" >/dev/null || gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" >/dev/null 2>&1; then
+              fail "Tag $tag already exists."
+            fi
+          fi
+
+          if [ -n "$previous" ]; then
+            version_tool is-newer "$version" "${previous#v}" \
+              || fail "Version $version is not higher than the previous release $previous; installed apps would not update."
+            [ "$(git rev-list --count "$previous..$GITHUB_SHA")" -gt 0 ] \
+              || fail "No commits since the previous release $previous. Nothing to release."
+          fi
+
+          {
+            echo "publish=true"
+            echo "tag=$tag"
+            echo "version=$version"
+            echo "previous=$previous"
+          } >> "$GITHUB_OUTPUT"
+          echo "Releasing $tag; previous release: ${previous:-none}."
+
+  build:
+    name: Build and test on Windows
+    needs: plan
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Cache Electron downloads
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
+          key: electron-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: electron-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint, type check and unit tests
+        run: npm run lint && npm run typecheck && npm test
+
+      - name: End-to-end tests (starts the real app)
+        run: npm run test:e2e
+
+      - name: Build the installer
+        env:
+          # Set only for a real release; otherwise this builds a Dev installer.
+          APP_RELEASE_VERSION: ${{ needs.plan.outputs.publish == 'true' && needs.plan.outputs.version || '' }}
+        run: npm run dist
+
+      - name: Collect the files
+        id: files
+        shell: bash
+        env:
+          PUBLISH: ${{ needs.plan.outputs.publish }}
+        run: |
+          set -euo pipefail
+          installer="$(ls dist/*-setup.exe)"
+          product="$(node -p "require('./package.json').productName")"
+          if [ "$PUBLISH" != "true" ]; then product="$product Dev"; fi
+          echo "installer=$installer" >> "$GITHUB_OUTPUT"
+          echo "product=$product" >> "$GITHUB_OUTPUT"
+          mkdir -p release-files
+          cp "$installer" release-files/
+          # Only present with automatic updates on: what installed apps read to find updates.
+          cp dist/latest.yml dist/*.blockmap release-files/ 2>/dev/null || true
+          ls -l release-files
+          echo "### Built \`$(basename "$installer")\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install, start and uninstall it
+        shell: pwsh
+        run: ./scripts/smoke-test-installer.ps1 -Installer '${{ steps.files.outputs.installer }}' -ProductName '${{ steps.files.outputs.product }}'
+
+      - name: Upload the installer
+        uses: actions/upload-artifact@v7
+        with:
+          path: ${{ steps.files.outputs.installer }}
+          archive: false
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Upload the release files
+        if: needs.plan.outputs.publish == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-files
+          path: release-files/
+          retention-days: 7
+          if-no-files-found: error
+
+  publish:
+    name: Publish the GitHub Release
+    needs: [plan, build]
+    if: needs.plan.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      # The only job that may write: it creates the tag and the release.
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-files
+          path: release-files
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.plan.outputs.tag }}
+          PREVIOUS: ${{ needs.plan.outputs.previous }}
+        run: |
+          set -euo pipefail
+          notes_from=()
+          if [ -n "$PREVIOUS" ]; then notes_from=(--notes-start-tag "$PREVIOUS"); fi
+          # Creates the tag on this exact commit if it does not exist yet (manual runs).
+          gh release create "$TAG" release-files/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "$TAG" \
+            --generate-notes "${notes_from[@]}" \
+            --latest
+          echo "### Published [$TAG]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$TAG)" >> "$GITHUB_STEP_SUMMARY"
