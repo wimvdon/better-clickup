@@ -1,8 +1,21 @@
-# Windows app template (Electron)
+# Better ClickUp
 
-A starting point for Windows desktop apps built with Claude Code and GitHub. Out of the box it
-**builds, tests, installs and releases**. The only app content is a placeholder screen with a
-click counter.
+A lighter ClickUp desktop app for Windows:
+
+- **Tabs** in one window (Ctrl+T, Ctrl+W, Ctrl+Tab, drag to reorder, right-click for more).
+- **Uses less memory:** background tabs go to sleep after 10 minutes and load with fresh data
+  when you open them; at most 4 tabs stay loaded.
+- **Windows notifications** like the official app; clicking one opens the right tab. Keeps
+  running in the tray when you close the window, and can start with Windows.
+- **Links:** ClickUp links open as tabs, other links in your browser; `clickup://` links open
+  in the app.
+- Windows 11 look, with Mica, light/dark mode, English and Dutch.
+
+What it does and how it's built: [`docs/architecture.md`](docs/architecture.md).
+
+## About the template
+
+Built from a Windows app template. Out of the box it **builds, tests, installs and releases**.
 
 - Electron + React + TypeScript, with **Fluent UI** so it looks like a Windows 11 app
   (follows light/dark mode). English and Dutch.

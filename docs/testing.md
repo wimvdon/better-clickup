@@ -8,7 +8,7 @@
 | Type check           | `npm run typecheck`                | Linux   | Type errors, **missing translations**, wrong IPC types                                                                                                 |
 | Unit tests           | `npm test` (Vitest)                | Linux   | Logic bugs in `src/shared/`, the `app://` path checks, version rules                                                                                   |
 | Dependency audit     | `npm audit --omit=dev`             | Linux   | Known vulnerabilities in what ships inside the app                                                                                                     |
-| End-to-end tests     | `npm run test:e2e` (Playwright)    | Windows | The real app: it starts, shows the screen, buttons work, no errors in the page, the page stays locked down                                             |
+| End-to-end tests     | `npm run test:e2e` (Playwright)    | Windows | The real app with a fake ClickUp: tabs, shortcuts, links, notifications, restoring sleeping tabs, no errors in the pages, the pages stay locked down   |
 | Installer smoke test | `scripts/smoke-test-installer.ps1` | Windows | The installer works, the Start menu shortcut exists, the **installed** app (with all security switches on) opens and doesn't crash, uninstalling works |
 
 Reports (Playwright HTML report, screenshots and traces of failures) are attached to every CI
@@ -25,7 +25,10 @@ npm run test:e2e          # Linux without a screen: xvfb-run -a npm run test:e2e
 
 - **Unit tests** (`*.test.ts` next to the code): every logic change. Keep the logic in plain
   TypeScript so it needs no Electron. See `src/shared/counter.test.ts`.
-- **End-to-end tests** (`e2e/*.spec.ts`): one per important user flow. Find elements the way a
+- **End-to-end tests** (`e2e/*.spec.ts`): one per important user flow. ClickUp is replaced by
+  small fake pages (`e2e/fake-clickup.mjs`), which also record notifications and links sent to
+  the browser. Press shortcuts with the `press()` helper: Playwright's own key presses skip the
+  app's shortcut handling. Find elements the way a
   user would (`getByRole('button', { name: 'Click me' })`), not by CSS classes. Test in English
   (`--lang=en-US` is passed).
 - Test names describe behaviour: `it('stops at the maximum')`.
@@ -45,4 +48,6 @@ description. In addition, check every now and then (always before a release):
 - [ ] **Language**: Settings → Time & language → Language & region → put Nederlands first (sign
       out and in). The app is in Dutch.
 - [ ] **Second start**: start the app again while it's open; the open window comes to the front.
+- [ ] **ClickUp for real**: log in, open a few tabs, get a notification (ask a colleague to
+      mention you), click it. Close the window: the app stays in the tray and notifications keep coming.
 - [ ] After a release: install it over the previous release. It updates and keeps your settings.

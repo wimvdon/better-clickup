@@ -1,54 +1,29 @@
 import {
-  Body1,
-  Button,
-  Caption1,
   FluentProvider,
-  LargeTitle,
-  Subtitle2,
   makeStyles,
-  tokens,
   webDarkTheme,
   webLightTheme,
 } from '@fluentui/react-components';
-import { useEffect, useMemo, useState } from 'react';
-import { createCounter, increment, reset } from '../../shared/counter';
+import { useEffect, useMemo } from 'react';
 import { createTranslator, pickLanguage } from '../../shared/i18n';
+import { TabBar } from './components/TabBar';
 import { useAppInfo } from './hooks/useAppInfo';
 import { useSystemDarkMode } from './hooks/useSystemDarkMode';
+import { useTabs } from './hooks/useTabs';
 
 const useStyles = makeStyles({
-  page: {
-    height: '100%',
-    display: 'flex',
-    flexDirection: 'column',
-    backgroundColor: tokens.colorNeutralBackground1,
-  },
-  content: {
-    flex: 1,
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: tokens.spacingVerticalL,
-    padding: tokens.spacingHorizontalXXL,
-    textAlign: 'center',
-  },
-  buttons: {
-    display: 'flex',
-    gap: tokens.spacingHorizontalM,
-  },
-  footer: {
-    padding: tokens.spacingHorizontalM,
-    textAlign: 'center',
-    color: tokens.colorNeutralForeground3,
-  },
+  page: { height: '100%', backgroundColor: 'transparent' },
 });
 
+/**
+ * The app's own UI is only the tab bar at the top of the window. The ClickUp pages are drawn
+ * by the main process below it (src/main/tabs.ts).
+ */
 export function App() {
   const styles = useStyles();
   const dark = useSystemDarkMode();
   const info = useAppInfo();
-  const [counter, setCounter] = useState(createCounter);
+  const tabs = useTabs();
 
   const language = pickLanguage(info?.languages ?? navigator.languages);
   const t = useMemo(() => createTranslator(language), [language]);
@@ -61,20 +36,7 @@ export function App() {
 
   return (
     <FluentProvider theme={dark ? webDarkTheme : webLightTheme} className={styles.page}>
-      <main className={styles.content}>
-        <LargeTitle as="h1">{t('home.heading')}</LargeTitle>
-        <Body1>{t('home.body')}</Body1>
-        <Subtitle2 role="status">{t('home.clickCount', { count: counter.count })}</Subtitle2>
-        <div className={styles.buttons}>
-          <Button appearance="primary" onClick={() => setCounter(increment)}>
-            {t('home.clickButton')}
-          </Button>
-          <Button onClick={() => setCounter(reset())}>{t('home.resetButton')}</Button>
-        </div>
-      </main>
-      <footer className={styles.footer}>
-        <Caption1>{info ? t('footer.version', { version: info.version }) : ' '}</Caption1>
-      </footer>
+      <TabBar tabs={tabs} t={t} mica={info?.mica ?? false} />
     </FluentProvider>
   );
 }
