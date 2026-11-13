@@ -37,6 +37,11 @@ const config = {
   directories: { output: 'dist', buildResources: 'build' },
   files: ['out/**', 'package.json'],
   asar: true,
+  // The icon in the notification area (src/main/tray.ts).
+  extraResources: [{ from: isRelease ? 'build/icon.ico' : 'build/icon-dev.ico', to: 'tray.ico' }],
+  // ClickUp's "open in the desktop app" links (clickup://…) open in this app. The installer
+  // registers them for the current Windows user and the uninstaller removes them.
+  protocols: [{ name: 'ClickUp link', schemes: ['clickup'] }],
 
   win: {
     target: [{ target: 'nsis', arch: ['x64'] }],

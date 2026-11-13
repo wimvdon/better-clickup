@@ -22,6 +22,9 @@ export default defineConfig({
   preload: {
     build: {
       rollupOptions: {
+        // Two preload scripts: the tab bar's (index) and the ClickUp pages' (clickup).
+        // They share no modules, so each builds to one self-contained file, as sandboxing requires.
+        input: { index: 'src/preload/index.ts', clickup: 'src/preload/clickup.ts' },
         // Sandboxed preload scripts must be CommonJS.
         output: { format: 'cjs', entryFileNames: '[name].cjs' },
       },

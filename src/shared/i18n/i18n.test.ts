@@ -49,21 +49,21 @@ describe('pickLanguage', () => {
 
 describe('createTranslator', () => {
   it('fills in placeholders', () => {
-    expect(createTranslator('en')('footer.version', { version: '1.2.3' })).toBe('Version 1.2.3');
+    expect(createTranslator('en')('tray.version', { version: '1.2.3' })).toBe('Version 1.2.3');
   });
 
   it('chooses the plural form', () => {
     const t = createTranslator('en');
-    expect(t('home.clickCount', { count: 1 })).toBe('Clicked 1 time');
-    expect(t('home.clickCount', { count: 0 })).toBe('Clicked 0 times');
-    expect(t('home.clickCount', { count: 5 })).toBe('Clicked 5 times');
+    expect(t('tray.tooltip', { app: 'App', count: 1 })).toBe('App: 1 tab open');
+    expect(t('tray.tooltip', { app: 'App', count: 0 })).toBe('App: 0 tabs open');
+    expect(t('tray.tooltip', { app: 'App', count: 5 })).toBe('App: 5 tabs open');
   });
 
   it('translates', () => {
-    expect(createTranslator('nl')('home.clickButton')).toBe('Klik hier');
+    expect(createTranslator('nl')('menu.copy')).toBe('Kopiëren');
   });
 
   it('leaves unknown placeholders visible instead of dropping them', () => {
-    expect(createTranslator('en')('footer.version')).toBe('Version {version}');
+    expect(createTranslator('en')('tray.version')).toBe('Version {version}');
   });
 });
